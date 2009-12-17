@@ -1,0 +1,95 @@
+#!/usr/bin/ruby
+
+# Usage:
+# $ export SVN_EDITOR=svneditor
+# $ svn st
+# M    file1
+# M    file2
+# $ svn ci
+# ...
+# $ svn log -v | head
+# --------------------------------------------
+# r3411 | username | YYYY-MM-DD 00:33:29 +0900
+# Modified file1 and file2.
+#    M /trunk/file
+
+
+
+def write_message(file)
+  lines = nil
+  open(file) do |f|
+    lines = f.readlines
+  end
+  modified_files = create_modified_files(lines)
+
+  if modified_files.empty?
+    error(lines)
+  end
+
+  open(file, "w") do |f|
+    %w(A D M).each do |m|
+      if modified_files.has_key?(m)
+        files = modified_files[m]
+
+        f.puts format("%s %s%s.",
+                      message(m, lines),
+                      files[0],
+                      other_files(files))
+      end
+    end
+    f.puts lines[1..-1]
+  end
+end
+
+SYMBOL_MAP = {
+  "M"  => "M",
+  "A"  => "A",
+  "D"  => "D",
+  "AM" => "A",
+}
+
+START_LINENO_OF_FILES = 3
+def create_modified_files(lines)
+  if lines.size < START_LINENO_OF_FILES
+    error(lines)
+  end
+
+  lines[3..-1].inject(Hash.new {[]}) do |r, line|
+    unless line =~ /^([ADM]+)\s+(.+)$/
+      error(lines)
+    end
+
+    r[SYMBOL_MAP[$1]] += [File.basename($2)]
+    r
+  end
+end
+
+MESSAGES = {
+  "M" => "Modified",
+  "D" => "Deleted",
+  "A" => "Added",
+}
+
+def message(m, lines)
+  unless MESSAGES.has_key?(m)
+    error(lines)
+  end
+  MESSAGES[m]
+end
+
+def other_files(files)
+  case files.size
+  when 1
+    ""
+  when 2
+    " and " + files[1]
+  else
+    format(" and other %s files", files.size - 1)
+  end
+end
+
+def error(lines)
+  raise "unsupported message.\n" + lines.join("")
+end
+
+write_message(ARGV[0])
